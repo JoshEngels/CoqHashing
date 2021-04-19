@@ -13,6 +13,7 @@ From Coq Require Import Lia.
 
 Definition function := nat -> nat.
 
+(* TODO: Change to coq injective definition *)
 Definition injective (f : function) := forall a b, f a = f b -> a = b.
 
 Lemma s_is_injective:
@@ -92,8 +93,6 @@ Proof.
   intros. unfold not. intros. apply set_add_elim in H0. contradiction. 
 Qed.
 
-(* TODO: Defined injective hash map: input is set and function is injective. *)
-
 (* If an element n is not in a set s and f is an injective function, 
    f(n) is not in f(s) *)
 Lemma injective_func_preserves_not_in_set:
@@ -120,20 +119,20 @@ Qed.
   |f(s)| = |s|. *)
 Lemma injective_func_leads_to_no_collisions:
   forall (f: function) (s : set nat), injective f -> unique_set s -> length s = length (function_range f s).
-  intros. induction s as [| n l1 IHl1] eqn:A.
-  - reflexivity.
-  - unfold function_range. fold function_range. simpl. assert ((set_mem Nat.eq_dec n l1) = false).
-    + admit.
-    +
-  assert ((set_mem Nat.eq_dec (f n) (function_range f l1)) = false).
-    + unfold injective in H. 
-    + apply adding_an_element_not_in_set_increases_cardinality in H0. rewrite <- H0. 
-    simpl. rewrite IHl1. lia.
-  
-  (injective (hash_function h)) -> 
-    (length (hash_input h)) = (length (hash_function_range h)).
 Proof.
-  intros. unfold injective in H. induction (hash_input h) eqn:A.
-  - unfold hash_function_range. rewrite A. simpl. reflexivity.
-  - simpl. unfold hash_function_range. unfold function_range. rewrite A. 
-    assert ((set_mem Nat.eq_dec (f h0) (function_range f t)) = false).
+  intros. induction s.
+  - reflexivity.
+  - unfold function_range. fold function_range. simpl. 
+    assert ((set_mem Nat.eq_dec (f a) (function_range f s)) = false).
+    + assert ((set_mem Nat.eq_dec a s) = false).
+      * apply set_mem_complete2. unfold set_In. apply unique_set_preserves_uniqueness in H0.
+        apply NoDup_cons_iff in H0. destruct H0. apply H0.
+      * apply injective_func_preserves_not_in_set. apply H. apply H1.
+    + apply adding_an_element_not_in_set_increases_cardinality in H1. rewrite <- H1. 
+    assert (set_remove Nat.eq_dec a (a :: s) = s).
+      * unfold set_remove. destruct (Nat.eq_dec a a). reflexivity. contradiction.  
+      * assert (unique_set ( set_remove Nat.eq_dec a (a :: s))). 
+        apply unique_set_rem. apply H0. rewrite H2 in H3. apply IHs in H3. lia.
+Qed.
+
+(* TODO: Defined injective hash map: input is set and function is injective. *)
