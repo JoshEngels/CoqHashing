@@ -49,7 +49,7 @@ Fixpoint function_range (f: function) (l : list nat): set nat :=
   | h :: t => set_add Nat.eq_dec (f h) (function_range f t)
   end.
 
-Definition hash_function_range (h: hash_map) : (set nat) :=
+Definition hash_output (h: hash_map) : (set nat) :=
   (function_range (hash_function h) (hash_input h)).
 
 Definition set1 : set nat := 1 :: 2 :: nil.
@@ -115,7 +115,7 @@ Lemma injective_func_preserves_not_in_set:
       ** intros. apply set_mem_complete1 in H1. contradiction.
 Qed. 
 
-(* If f is a is an injective function and s is a unique set, then
+(* If f is an injective function and s is a unique set, then
   |f(s)| = |s|. *)
 Lemma injective_func_leads_to_no_collisions:
   forall (f: function) (s : set nat), injective f -> unique_set s -> length s = length (function_range f s).
@@ -135,4 +135,12 @@ Proof.
         apply unique_set_rem. apply H0. rewrite H2 in H3. apply IHs in H3. lia.
 Qed.
 
+Theorem injective_hash_map_on_set_no_collisions:
+  forall (h: hash_map), (injective (hash_function h)) -> (unique_set (hash_input h))
+    -> (length (hash_input h)) = (length (hash_output h)).
+Proof.
+  intros. apply injective_func_leads_to_no_collisions. apply H. apply H0.
+Qed.
+
 (* TODO: Defined injective hash map: input is set and function is injective. *)
+(* TODO: Define a restricted hash function property (stability?), to make it interesting *)
