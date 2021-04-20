@@ -142,5 +142,58 @@ Proof.
   intros. apply injective_func_leads_to_no_collisions. apply H. apply H0.
 Qed.
 
+
+(* From here on we stop focusing on ijective changes *)
+Definition range_change (f : function) (n_in n_out: nat):= forall a, a < n_in -> f a < n_out.
+
+Definition identity (n: nat) :=
+  match n with
+    | a => a
+  end.
+
+Lemma identity_preserves_identity:
+  forall x, identity x = x.
+Proof.
+  intros. destruct x. reflexivity. reflexivity. 
+Qed.
+
+(* Identity function preserves range *)
+Lemma identity_func_preserves_range:
+  forall (n: nat), range_change identity n n.
+Proof.
+  intros. unfold range_change. intros. destruct n. 
+  - lia.  
+  - unfold identity. destruct a.
+    + apply H.
+    + apply H.
+Qed.
+
+Check 3 mod 4.
+
+Definition mod_func k n :=
+  match n with
+    | a => n mod k
+  end.
+
+
+Require Import Coq.Numbers.Integer.Abstract.ZDivEucl.
+(* Mod function range is mod value *)
+Lemma K_mod_func_changes_range_to_k:
+  forall (modulus: nat) (n: nat), modulus > 0 -> range_change (mod_func modulus) n modulus.
+Proof.
+  intros. unfold range_change. intros. unfold mod_func. destruct a. 
+  - destruct modulus.
+    + lia.
+    + simpl. lia.
+  - assert (modulus <> 0). lia. apply Nat.mod_upper_bound. apply H1.
+Qed. 
+
+(* TODO: Introduce dependence on lists *)
+(* TODO: Range change from m to n, max set is < m, best guarentee is not more
+than m / n collisions. Proof some basic hash functions have best case of almost
+best case (i.e. maybe 2m / n) *)
+
+
+
 (* TODO: Defined injective hash map: input is set and function is injective. *)
 (* TODO: Define a restricted hash function property (stability?), to make it interesting *)
