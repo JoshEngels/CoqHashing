@@ -367,10 +367,20 @@ Proof.
     + apply function_range_max_size. apply H0. 
   - lia.
 
+  
+(* So big theorems I proved are
+  1. An injective, unique hash map has no collisions.
+  2. A hash map with input size s modded to range m has >= max(0, s - m) collisions. 
+*)
 
-(* Some fun examples *)
-Import ListNotations.
-Definition squared (n: nat) := n * n.
-Definition hash_map_1 := hash (squared) [1; 2; 3; 4; 5; 6; 7; 8; 9; 10].
-Definition hash_map_1_mod := (modded_hash_map hash_map_1 11).
-Compute (num_collisions hash_map_1_mod).
+
+(* ------------- Some fun examples --------------*)
+
+(* A simple hash does pretty well *)
+Definition simple_hash (x: nat) := x^(x mod 3) + 13 * x - (1111 mod x) + 37 * x.
+Definition hash_map_1 := hash (simple_hash) (seq 100 200).
+Definition hash_map_1_mod_500 := (modded_hash_map hash_map_1 500).
+Compute (num_collisions hash_map_1_mod_500). 
+(* But not when you reduce the mod *)
+Definition hash_map_1_mod_200 := (modded_hash_map hash_map_1 200).
+Compute (num_collisions hash_map_1_mod_200). 
