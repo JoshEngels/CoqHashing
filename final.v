@@ -2,14 +2,63 @@
   | Var: nat -> variable. *)
 
 (* TODO: Change hashmap to take in any object using polymorphism *)
-(* TODO: Switch to list of pairs? Might make things easier but also
-seperating function and data more interesting *)
 Require Import Coq.Lists.ListSet.
 Require Import List.
 Require Import Coq.Arith.Arith.
 Require Coq.Arith.PeanoNat.
 From Coq Require Import Lia.
 
+
+(* Had to copy the below from the standard library since couldn't import *)
+(* -------------------------------------------------------------------------- *)
+(** Remove by filtering *)
+Definition remove' (x : nat) : list nat -> list nat :=
+  filter (fun y => if Nat.eq_dec x y then false else true).
+
+Lemma remove_alt (x : nat) (l : list nat) : remove' x l = remove Nat.eq_dec x l.
+Proof with intuition.
+  induction l...
+  simpl. destruct Nat.eq_dec; f_equal...
+Qed.
+
+(** Counting occurrences by filtering *)
+
+Definition count_occ' (l : list nat) (x : nat) : nat :=
+  length (filter (fun y => if Nat.eq_dec y x then true else false) l).
+
+Lemma count_occ_alt (l : list nat) (x : nat) :
+  count_occ' l x = count_occ Nat.eq_dec l x.
+Proof with intuition.
+  unfold count_occ'. induction l...
+  simpl; destruct Nat.eq_dec; simpl...
+Qed.
+
+Lemma in_remove: forall l x y, In x (remove Nat.eq_dec y l) -> In x l /\ x <> y.
+Proof.
+  intro l; induction l as [|z l IHl]; intros x y Hin.
+  - inversion Hin.
+  - simpl in Hin.
+    destruct (Nat.eq_dec y z) as [Heq|Hneq]; subst; split.
+    + right; now apply IHl with z.
+    + intros Heq; revert Hin; subst; apply remove_In.
+    + inversion Hin; subst; [left; reflexivity|right].
+      now apply IHl with y.
+    + destruct Hin as [Hin|Hin]; subst.
+      * now intros Heq; apply Hneq.
+      * intros Heq; revert Hin; subst; apply remove_In.
+Qed.
+
+Lemma NoDup_filter:
+  forall (f: nat -> bool) (l: list nat), NoDup l -> NoDup (filter f l).
+Proof.
+  induction l as [|a l IHl]; simpl; intros Hnd; auto.
+  apply NoDup_cons_iff in Hnd.
+  destruct (f a); [ | intuition ].
+  apply NoDup_cons_iff; split; [intro H|]; intuition.
+  apply filter_In in H; intuition.
+Qed.
+
+(* -------------------------------------------------------------------------- *)
 
 Definition function := nat -> nat.
 
@@ -135,13 +184,16 @@ Proof.
         apply unique_set_rem. apply H0. rewrite H2 in H3. apply IHs in H3. lia.
 Qed.
 
+Definition num_collisions (h: hash_map) := length (hash_input h) - length (hash_output h).
+
 Theorem injective_hash_map_on_set_no_collisions:
   forall (h: hash_map), (injective (hash_function h)) -> (unique_set (hash_input h))
-    -> (length (hash_input h)) = (length (hash_output h)).
+    -> num_collisions h = 0.
 Proof.
-  intros. apply injective_func_leads_to_no_collisions. apply H. apply H0.
+  intros. unfold num_collisions. assert (length (hash_input h) = length (hash_output h)). 
+  apply injective_func_leads_to_no_collisions. apply H. apply H0.
+  lia.
 Qed.
-
 
 (* From here on we stop focusing on ijective changes *)
 Definition range_change (f : function) (n_in n_out: nat):= forall a, a < n_in -> f a < n_out.
@@ -168,8 +220,6 @@ Proof.
     + apply H.
 Qed.
 
-Check 3 mod 4.
-
 Definition mod_func k n :=
   match n with
     | a => n mod k
@@ -188,12 +238,139 @@ Proof.
   - assert (modulus <> 0). lia. apply Nat.mod_upper_bound. apply H1.
 Qed. 
 
-(* TODO: Introduce dependence on lists *)
-(* TODO: Range change from m to n, max set is < m, best guarentee is not more
-than m / n collisions. Proof some basic hash functions have best case of almost
-best case (i.e. maybe 2m / n) *)
+Definition composed_funcs (f g: function) (n: nat) :=
+  match n with
+    | a => (f (g a))
+  end.
+
+Definition modded_hash_map (h: hash_map) (m: nat) :=
+  hash (composed_funcs (mod_func m)(hash_function h)) (hash_input h) .
+
+(* Introduce the idea of bounding functions and a modded hash map *)
+Definition function_bound (f: function) (n: nat) := forall m: nat, f m < n.
+
+Lemma mod_func_bound:
+  forall (m: nat), (m > 0) -> function_bound (mod_func m) m.
+Proof.
+  unfold function_bound. intros. unfold mod_func. apply Nat.mod_upper_bound. lia.
+Qed.  
+
+Lemma composition_preserves_bound:
+  forall (f g: function) (n: nat), 
+  function_bound f n -> function_bound (composed_funcs f g) n.
+Proof.
+  intros. unfold function_bound. intros. unfold composed_funcs. 
+  unfold function_bound in H. apply H.
+Qed. 
 
 
+(* Filters with opposite values means sum preserves length *)
+Lemma sum_length_opposite_filters_preserves_length:
+  forall (l: list nat) (f g: nat -> bool), 
+    (forall n: nat, f n = negb (g n)) -> length (filter f l) + length (filter g l) = length l.
+Proof.
+  intros. induction l.
+  - reflexivity.
+  - simpl. destruct (f a) eqn:H0.
+    + simpl. specialize (H a). rewrite H0 in H.  destruct (g a). 
+      * discriminate.
+      * lia.
+    + simpl. specialize (H a). rewrite H0 in H.  destruct (g a). 
+      * simpl. lia.
+      * discriminate.
+Qed. 
 
-(* TODO: Defined injective hash map: input is set and function is injective. *)
-(* TODO: Define a restricted hash function property (stability?), to make it interesting *)
+
+Require Import Coq.Lists.List.
+(* Count of number of elements removed plus length of original list is length
+of original length *)
+Lemma sum_length_remove_preserves_length:
+  forall (l: list nat) (n: nat),
+    length (remove Nat.eq_dec n l) + (count_occ Nat.eq_dec l n) = length l.
+Proof.
+  intros. rewrite <- remove_alt. rewrite <- count_occ_alt. 
+  unfold remove'. unfold count_occ'. apply sum_length_opposite_filters_preserves_length.
+  intros. destruct (Nat.eq_dec n n0).
+  - destruct (Nat.eq_dec n0 n). reflexivity. rewrite e in n1. contradiction.
+  - destruct (Nat.eq_dec n0 n). rewrite e in n1. contradiction. reflexivity. 
+Qed.
+
+Definition list_bound (l: list nat) (m: nat) := forall (n: nat), (In n l) -> n < m.
+
+Require Import Coq.Lists.List.
+
+(* If a set is a unique set and bounded? (do the proof to figure out condition) 
+   then it has at most length equal to the bound *)
+Lemma set_bound_is_max_length:
+  forall (m: nat) (s: set nat), (NoDup s) -> (list_bound s m) -> length s <= m.
+Proof.
+  induction m.
+  - intros. unfold list_bound in H0. induction s.
+    + reflexivity.
+    + specialize (H0 a). simpl in H0. assert (~(a < 0)). lia. apply H1 in H0. lia. lia.
+  - intros. assert (list_bound (remove Nat.eq_dec m s) m).
+    + unfold list_bound. intros. apply in_remove in H1. destruct H1. 
+      unfold list_bound in H0. specialize (H0 n). apply H0 in H1. lia.
+    + assert (NoDup (remove Nat.eq_dec m s)).
+      * rewrite <- remove_alt. unfold remove'. apply NoDup_filter. apply H. 
+      * specialize (IHm (remove Nat.eq_dec m s)). apply IHm in H2.
+        ** assert ((length (remove Nat.eq_dec m s)) + (count_occ Nat.eq_dec s m) = length s).
+          *** apply sum_length_remove_preserves_length.
+          *** rewrite <- H3. assert (count_occ Nat.eq_dec s m <= 1).
+            **** apply NoDup_count_occ. apply H.
+            **** lia. 
+        ** apply H1.
+Qed.
+
+Lemma function_bound_implies_list_bound:
+  forall (f: function) (l: list nat) (m: nat),
+  (function_bound f m) -> (list_bound (function_range f l) m).
+Proof.
+  intros. induction l.
+  - easy.
+  - unfold list_bound. unfold list_bound in IHl. unfold function_range. fold function_range.
+    intros. apply  set_add_elim in H0. destruct H0.
+    + unfold function_bound in H. specialize (H a). rewrite H0. apply H.
+    + specialize (IHl n). apply IHl. apply H0.
+Qed.
+
+
+(* If a function has a max, the range of the function on any list is less than 
+   than the max. *)
+Lemma function_range_max_size:
+  forall (f: function) (l: list nat) (max: nat), 
+  (function_bound f max) -> (length (function_range f l)) <= max.
+Proof.
+  intros. assert (unique_set (function_range f l)).
+  - induction l.
+  + simpl. apply unique_set_empty.
+  + unfold function_range. apply unique_set_add. unfold function_range in IHl. apply IHl. 
+  - apply set_bound_is_max_length. apply unique_set_preserves_uniqueness in H0. apply H0. apply function_bound_implies_list_bound. apply H.
+Qed.
+  
+(* Best case number of hash collisions for any hash function:
+   If we have a modded hash map to length l, and the hash input is of length k,
+   then there >= k - l collisions.
+*)
+Theorem best_case_hash_map_num_collisions:
+  forall (h: hash_map) (output_length: nat), 
+  output_length > 0 -> num_collisions (modded_hash_map h output_length) >= 
+  (length (hash_input h)) - output_length.
+Proof.
+  intros. unfold num_collisions. simpl. 
+  assert (length (hash_output (modded_hash_map h output_length)) <= output_length).
+  - unfold modded_hash_map. unfold hash_output.
+    assert (function_bound (hash_function
+    (hash (composed_funcs (mod_func output_length) (hash_function h))
+       (hash_input h))) output_length).
+    + apply composition_preserves_bound. apply mod_func_bound. apply H.
+    + apply function_range_max_size. apply H0. 
+  - lia.
+
+
+(* Some fun examples *)
+Import ListNotations.
+Definition squared (n: nat) := n * n.
+Definition hash_map_1 := hash (squared) [1; 2; 3; 4; 5; 6; 7; 8; 9; 10].
+Definition hash_map_1_mod := (modded_hash_map hash_map_1 11).
+Compute (num_collisions hash_map_1_mod).
